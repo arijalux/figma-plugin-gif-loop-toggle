@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --fg: #1e1e1e;
+    --muted: #6b6b6b;
+    --border: #e6e6e6;
+    --accent: #18a0fb;
+    --accent-hover: #0d8ee0;
+    --bg: #ffffff;
+    --danger: #f24822;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  .direction {
+    display: flex;
+    gap: 4px;
+    margin: 12px 16px 0;
+    padding: 3px;
+    background: #f5f5f5;
+    border-radius: 8px;
+  }
+  .direction-option {
+    flex: 1;
+    text-align: center;
+    padding: 7px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 500;
+    user-select: none;
+  }
+  .direction-option.active {
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-top: 12px; }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+  .tab.active { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+  p.desc { color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
+  .radio-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  label { cursor: pointer; }
+  input[type="file"] { display: block; margin-bottom: 12px; font-size: 11px; width: 100%; }
+  button {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #cfcfcf; cursor: not-allowed; }
+  .status {
+    margin-top: 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    display: none;
+  }
+  .status.info { display: block; background: #eef7ff; color: #0d5c96; }
+  .status.success { display: block; background: #e6f7ee; color: #147a42; }
+  .status.error { display: block; background: #fdeceb; color: var(--danger); }
+</style>
+</head>
+<body>
+  <div class="direction">
+    <div class="direction-option active" data-direction="remove">Stop loop (play once)</div>
+    <div class="direction-option" data-direction="add">Loop forever</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="selection">From selection</div>
+    <div class="tab" data-tab="upload">Upload GIF</div>
+  </div>
+
+  <div class="panel active" id="panel-selection">
+    <p class="desc" id="desc-selection">Select one or more layers whose fill is a looping GIF. This finds every GIF fill in your selection and removes its loop, so it plays once and stops on the last frame.</p>
+    <button id="run-selection">Convert selected layers</button>
+    <div class="status" id="status-selection"></div>
+  </div>
+
+  <div class="panel" id="panel-upload">
+    <p class="desc" id="desc-upload">Upload a looping GIF to convert it to play once.</p>
+    <input type="file" id="file-input" accept="image/gif" />
+    <div class="radio-row">
+      <input type="radio" name="target" id="target-download" value="download" checked />
+      <label for="target-download">Download the converted file</label>
+    </div>
+    <div class="radio-row">
+      <input type="radio" name="target" id="target-apply" value="apply" />
+      <label for="target-apply">Apply as fill to selected layer(s)</label>
+    </div>
+    <button id="run-upload" disabled>Convert GIF</button>
+    <div class="status" id="status-upload"></div>
+  </div>
+
+  <script>
+    const post = (message) => parent.postMessage({ pluginMessage: message }, '*');
+
+    let direction = 'remove';
+    const directionOptions = document.querySelectorAll('.direction-option');
+    const copy = {
+      remove: {
+        selectionDesc: 'Select one or more layers whose fill is a looping GIF. This finds every GIF fill in your selection and removes its loop, so it plays once and stops on the last frame.',
+        uploadDesc: 'Upload a looping GIF to convert it to play once.',
+        selectionButton: 'Stop loop on selected layers',
+        uploadButton: 'Stop loop',
+        downloadName: 'play-once.gif',
+      },
+      add: {
+        selectionDesc: 'Select one or more layers whose fill is a GIF that plays once. This finds every GIF fill in your selection and makes it loop forever.',
+        uploadDesc: 'Upload a GIF that plays once to make it loop forever.',
+        selectionButton: 'Loop selected layers forever',
+        uploadButton: 'Loop forever',
+        downloadName: 'loop-forever.gif',
+      },
+    };
+
+    function applyDirectionCopy() {
+      const c = copy[direction];
+      document.getElementById('desc-selection').textContent = c.selectionDesc;
+      document.getElementById('desc-upload').textContent = c.uploadDesc;
+      document.getElementById('run-selection').textContent = c.selectionButton;
+      document.getElementById('run-upload').textContent = c.uploadButton;
+    }
+
+    directionOptions.forEach((opt) => {
+      opt.addEventListener('click', () => {
+        directionOptions.forEach((o) => o.classList.remove('active'));
+        opt.classList.add('active');
+        direction = opt.dataset.direction;
+        applyDirectionCopy();
+      });
+    });
+    applyDirectionCopy();
+
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((t) => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    function showStatus(id, kind, message) {
+      const el = document.getElementById(id);
+      el.className = 'status ' + kind;
+      el.textContent = message;
+    }
+
+    document.getElementById('run-selection').addEventListener('click', () => {
+      showStatus('status-selection', 'info', 'Working…');
+      post({ type: 'process-selection', direction });
+    });
+
+    let selectedFileBytes = null;
+    const fileInput = document.getElementById('file-input');
+    const runUploadButton = document.getElementById('run-upload');
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        selectedFileBytes = null;
+        runUploadButton.disabled = true;
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        selectedFileBytes = Array.from(new Uint8Array(reader.result));
+        runUploadButton.disabled = false;
+        showStatus('status-upload', 'info', file.name + ' ready to convert.');
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    runUploadButton.addEventListener('click', () => {
+      if (!selectedFileBytes) return;
+      const target = document.querySelector('input[name="target"]:checked').value;
+      showStatus('status-upload', 'info', 'Working…');
+      post({ type: 'process-upload', bytes: selectedFileBytes, target, direction });
+    });
+
+    function downloadBytes(bytes, filename) {
+      const blob = new Blob([new Uint8Array(bytes)], { type: 'image/gif' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    window.onmessage = (event) => {
+      const message = event.data.pluginMessage;
+      if (!message) return;
+
+      if (message.type === 'error') {
+        showStatus('status-selection', 'error', message.message);
+        showStatus('status-upload', 'error', message.message);
+        return;
+      }
+
+      if (message.type === 'selection-result') {
+        const verb = message.direction === 'add' ? 'set to loop forever' : 'converted to play once';
+        const alreadyLabel = message.direction === 'add' ? 'already looped' : 'already played once';
+        const parts = [];
+        if (message.converted > 0) parts.push(message.converted + ' GIF(s) ' + verb + '.');
+        if (message.alreadyMatched > 0) parts.push(message.alreadyMatched + ' ' + alreadyLabel + '.');
+        if (message.skipped > 0) parts.push(message.skipped + ' skipped (not a GIF or unreadable).');
+        if (parts.length === 0) parts.push('Nothing to convert.');
+        showStatus('status-selection', message.converted > 0 ? 'success' : 'info', parts.join(' '));
+        return;
+      }
+
+      if (message.type === 'download-ready') {
+        const filename = copy[message.direction].downloadName;
+        downloadBytes(message.bytes, filename);
+        const alreadyLabel = message.direction === 'add' ? 'already looped' : 'already played once';
+        showStatus(
+          'status-upload',
+          'success',
+          message.changed ? 'Converted and downloaded.' : 'This GIF ' + alreadyLabel + '. Downloaded unchanged.'
+        );
+        return;
+      }
+
+      if (message.type === 'upload-applied') {
+        const alreadyLabel = message.direction === 'add' ? 'Already looped' : 'Already played once';
+        const verb = message.changed ? 'Converted and applied' : alreadyLabel + ' — applied unchanged';
+        showStatus('status-upload', 'success', verb + ' to ' + message.count + ' layer(s).');
+        return;
+      }
+    };
+  </script>
+</body>
+</html>
